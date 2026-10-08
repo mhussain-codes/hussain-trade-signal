@@ -156,7 +156,7 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
   "confidence": number,
   "reasoning": "string"
 }
-\`;
+`;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
