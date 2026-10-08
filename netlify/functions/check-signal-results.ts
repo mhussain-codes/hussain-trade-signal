@@ -15,19 +15,18 @@ export const handler = schedule('* * * * *', async () => {
 
   try {
     // 1. Fetch PENDING signals from Supabase
-    // We only want signals where created_at + duration_seconds < NOW
     const supabaseHeaders = {
       'apikey': SUPABASE_SERVICE_KEY,
-      'Authorization': `Bearer \${SUPABASE_SERVICE_KEY}`,
+      'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
       'Content-Type': 'application/json'
     };
 
-    const signalsRes = await fetch(`\${SUPABASE_URL}/rest/v1/signals?result=eq.PENDING&select=*`, {
+    const signalsRes = await fetch(`${SUPABASE_URL}/rest/v1/signals?result=eq.PENDING&select=*`, {
       headers: supabaseHeaders
     });
 
     if (!signalsRes.ok) {
-      throw new Error(`Supabase fetch failed: \${await signalsRes.text()}`);
+      throw new Error(`Supabase fetch failed: ${await signalsRes.text()}`);
     }
 
     const pendingSignals = await signalsRes.json();
@@ -54,13 +53,13 @@ export const handler = schedule('* * * * *', async () => {
 
     for (const sym of symbols) {
       try {
-        const pRes = await fetch(`https://api.twelvedata.com/price?symbol=\${sym}&apikey=\${TWELVE_DATA_KEY}`);
+        const pRes = await fetch(`https://api.twelvedata.com/price?symbol=${sym}&apikey=${TWELVE_DATA_KEY}`);
         const pData = await pRes.json();
         if (pData.price) {
           prices[sym as string] = parseFloat(pData.price);
         }
       } catch (err) {
-        console.error(`Failed to fetch price for \${sym}:`, err);
+        console.error(`Failed to fetch price for ${sym}:`, err);
       }
     }
 
@@ -81,7 +80,7 @@ export const handler = schedule('* * * * *', async () => {
       }
 
       // Update in Supabase
-      const updateRes = await fetch(`\${SUPABASE_URL}/rest/v1/signals?id=eq.\${signal.id}`, {
+      const updateRes = await fetch(`${SUPABASE_URL}/rest/v1/signals?id=eq.${signal.id}`, {
         method: 'PATCH',
         headers: supabaseHeaders,
         body: JSON.stringify({
@@ -91,9 +90,9 @@ export const handler = schedule('* * * * *', async () => {
       });
 
       if (!updateRes.ok) {
-        console.error(`Failed to update signal \${signal.id}:`, await updateRes.text());
+        console.error(`Failed to update signal ${signal.id}:`, await updateRes.text());
       } else {
-        console.log(`Evaluated Signal \${signal.id} - Result: \${newResult}`);
+        console.log(`Evaluated Signal ${signal.id} - Result: ${newResult}`);
       }
     }
 

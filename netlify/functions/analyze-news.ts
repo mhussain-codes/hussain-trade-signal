@@ -1,6 +1,5 @@
 import Groq from 'groq-sdk';
 import { verifyLicense } from './utils/license';
-import { GROQ_MODEL, GROQ_TEMPERATURE } from './utils/groq-config';
 
 export const handler = async (event) => {
   if (event.httpMethod !== 'POST') {
@@ -34,7 +33,7 @@ Analyze the following recent market news for its potential impact on Gold (XAU/U
 Provide a breakdown of factors influencing the market.
 
 News Context:
-\${newsContext}
+${newsContext}
 
 Respond ONLY with a valid JSON object matching exactly this schema, with no markdown formatting or extra text:
 {
@@ -51,8 +50,8 @@ Respond ONLY with a valid JSON object matching exactly this schema, with no mark
           content: prompt
         }
       ],
-      model: GROQ_MODEL,
-      temperature: GROQ_TEMPERATURE,
+      model: 'llama-3.1-8b-instant', // DIRECT WORKING MODEL ADDED HERE
+      temperature: 0.5,
       response_format: { type: "json_object" }
     });
 

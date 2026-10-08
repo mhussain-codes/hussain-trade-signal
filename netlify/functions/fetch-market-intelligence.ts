@@ -1,6 +1,5 @@
 import Groq from 'groq-sdk';
 import { verifyLicense } from './utils/license';
-import { GROQ_MODEL, GROQ_TEMPERATURE } from './utils/groq-config';
 import { parseStringPromise } from 'xml2js';
 
 export const handler = async (event) => {
@@ -79,8 +78,8 @@ Respond ONLY with a JSON object exactly matching this schema:
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: GROQ_MODEL,
-      temperature: GROQ_TEMPERATURE,
+      model: 'llama-3.1-8b-instant', // DIRECT WORKING MODEL ADDED HERE
+      temperature: 0.5,
       response_format: { type: "json_object" }
     });
 
