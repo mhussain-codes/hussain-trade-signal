@@ -131,7 +131,7 @@ export const handler = async (event: any) => {
        filteredNews = "No news available.";
     }
 
-    // 3. Prompt Groq (llama-3.3-70b-versatile)
+    // 3. Prompt Groq (Using the updated active model)
     const groq = new Groq({ apiKey: GROQ_API_KEY });
     
     const prompt = `
@@ -160,7 +160,7 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: 'llama3-70b-8192',
+      model: 'llama-3.1-70b-versatile',
       temperature: 0.5,
       response_format: { type: "json_object" }
     });
