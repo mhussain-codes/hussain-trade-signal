@@ -119,19 +119,6 @@ export const Settings = () => {
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium">Default Signal Duration</label>
-              <select 
-                value={defaultDuration}
-                onChange={(e) => setDefaultDuration(Number(e.target.value))}
-                className="bg-background border border-white/10 rounded-lg px-4 py-2 focus:outline-none focus:border-primary text-text"
-              >
-                <option value={10}>10 Seconds</option>
-                <option value={15}>15 Seconds</option>
-                <option value={30}>30 Seconds</option>
-              </select>
-            </div>
-
-            <div className="flex flex-col gap-2">
               <label className="text-sm font-medium">Market Refresh Rate</label>
               <select 
                 value={refreshRate}

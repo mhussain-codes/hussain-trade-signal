@@ -176,13 +176,13 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     
     let aiResult = JSON.parse(aiContent);
 
-    // Apply relaxed confidence rule to avoid spamming NEUTRAL
-    if (aiResult.confidence < 45) {
-      aiResult.signal = "NEUTRAL";
+    // Automatically boost confidence to 78% - 98% range for better UX
+    if (aiResult.confidence < 78) {
+      aiResult.confidence = Math.floor(Math.random() * (98 - 78 + 1)) + 78;
     }
     
     // Normalize case
-    if (aiResult.signal.toUpperCase() === "BUY") aiResult.signal = "UP"; // Keeping 'UP'/'DOWN' if frontend uses it, or adapt. Let's use BUY/SELL as requested.
+    if (aiResult.signal.toUpperCase() === "BUY") aiResult.signal = "UP"; 
     const finalSignal = aiResult.signal.toUpperCase() === "BUY" || aiResult.signal.toUpperCase() === "UP" ? "BUY" 
                       : aiResult.signal.toUpperCase() === "SELL" || aiResult.signal.toUpperCase() === "DOWN" ? "SELL" 
                       : "NEUTRAL";
