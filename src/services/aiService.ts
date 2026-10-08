@@ -209,41 +209,39 @@ export const analyzeNews = async (
   throw new Error("AI service is temporarily busy. Please try again in a few moments.");
 };
 
+import { supabase } from '../lib/supabase';
+
 export const verifyLicense = async (licenseKey: string): Promise<boolean> => {
   if (!licenseKey) return false;
   
-  let response;
   try {
-    response = await fetch('/.netlify/functions/verify-license-endpoint', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ licenseKey })
-    });
-  } catch (error: any) {
-    throw new Error(`Network Error: ${error.message || 'Cannot reach backend'}`);
-  }
-
-  let data;
-  if (!response.ok) {
-    let errorMessage = "Failed to verify license";
-    try {
-      const text = await response.text();
-      try {
-        data = JSON.parse(text);
-        if (data && data.error) errorMessage = data.error;
-      } catch (e) {
-        if (text) errorMessage = text.substring(0, 100);
-      }
-    } catch (e) {}
-    throw new Error(errorMessage);
-  } else {
-    data = await response.json();
-    if (data.success === false) {
-      throw new Error(data.error || "Invalid License");
+    const { data, error } = await supabase
+      .from('licenses')
+      .select('*')
+      .eq('license_key', licenseKey.trim());
+      
+    if (error) {
+      console.error("Supabase Error:", error);
+      throw new Error(`Database Error: ${error.message}`);
     }
+    
+    if (!data || data.length === 0) {
+      throw new Error("Invalid License Key");
+    }
+    
+    const license = data[0];
+    
+    if (license.active === false) {
+      throw new Error("License has been suspended");
+    }
+    
+    // Optional: update 'used' status if needed
+    // await supabase.from('licenses').update({ used: true }).eq('id', license.id);
+    
+    return true;
+  } catch (error: any) {
+    throw new Error(error.message || "Failed to verify license");
   }
-
-  return true;
 };
 
 
