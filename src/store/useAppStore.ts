@@ -16,6 +16,25 @@ export interface SignalHistory {
   exitPrice?: number;
 }
 
+export interface Asset {
+  symbol: string;
+  name: string;
+  type: 'forex' | 'metal' | 'crypto' | 'index';
+}
+
+export const SUPPORTED_ASSETS: Asset[] = [
+  { symbol: 'XAU/USD', name: 'Gold', type: 'metal' },
+  { symbol: 'XAG/USD', name: 'Silver', type: 'metal' },
+  { symbol: 'EUR/USD', name: 'EUR/USD', type: 'forex' },
+  { symbol: 'GBP/USD', name: 'GBP/USD', type: 'forex' },
+  { symbol: 'USD/JPY', name: 'USD/JPY', type: 'forex' },
+  { symbol: 'BTC/USD', name: 'Bitcoin', type: 'crypto' },
+  { symbol: 'ETH/USD', name: 'Ethereum', type: 'crypto' },
+  { symbol: 'NDX', name: 'US100', type: 'index' },
+  { symbol: 'SPX', name: 'US500', type: 'index' },
+  { symbol: 'DJI', name: 'US30', type: 'index' }
+];
+
 interface AppState {
   licenseKey: string;
   setLicenseKey: (key: string) => void;
@@ -25,6 +44,8 @@ interface AppState {
   setRefreshRate: (rate: number) => void;
   defaultDuration: number;
   setDefaultDuration: (duration: number) => void;
+  activeAsset: Asset;
+  setActiveAsset: (asset: Asset) => void;
   theme: 'Dark' | 'Light';
   setTheme: (theme: 'Dark' | 'Light') => void;
   signals: SignalHistory[];
@@ -41,8 +62,10 @@ export const useAppStore = create<AppState>()(
       setIsLicenseActive: (active) => set({ isLicenseActive: active }),
       refreshRate: 15,
       setRefreshRate: (rate) => set({ refreshRate: rate }),
-      defaultDuration: 15,
+      defaultDuration: 60,
       setDefaultDuration: (duration) => set({ defaultDuration: duration }),
+      activeAsset: SUPPORTED_ASSETS[0],
+      setActiveAsset: (asset) => set({ activeAsset: asset }),
       theme: 'Dark',
       setTheme: (theme) => set({ theme }),
       signals: [],

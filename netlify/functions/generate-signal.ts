@@ -105,17 +105,22 @@ export const handler = async (event: any) => {
   try {
     const body = JSON.parse(event.body || '{}');
     const symbol = body.symbol || 'XAU/USD';
-    const duration = body.duration || 60; // 60, 120, 300
+    const duration = body.duration || 60; // 30, 60, 120, 300
     
-    // Interval mapped from duration
+    // Interval mapped from duration for Quotex Mode
     const interval = duration >= 300 ? '5min' : '1min';
 
     // 1. Fetch TwelveData Candles (Fetching 250 for EMA200 accuracy)
-    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=250&apikey=${TWELVE_DATA_KEY}`);
+    let fetchSymbol = symbol;
+    if (symbol === 'US100') fetchSymbol = 'NDX';
+    if (symbol === 'US500') fetchSymbol = 'SPX';
+    if (symbol === 'US30') fetchSymbol = 'DJI';
+
+    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=${fetchSymbol}&interval=${interval}&outputsize=250&apikey=${TWELVE_DATA_KEY}`);
     const timeSeriesData = await twelveDataRes.json();
     
     if (!timeSeriesData.values || timeSeriesData.values.length === 0) {
-      throw new Error("TwelveData API returned empty or error response");
+      throw new Error(`TwelveData API returned empty or error response for ${fetchSymbol}`);
     }
 
     // TwelveData returns newest first. Reverse to get oldest to newest for calculations.
@@ -128,14 +133,21 @@ export const handler = async (event: any) => {
 
     const indicators = calculateIndicators(rawCandles);
 
-    // 2. Fetch Finnhub News (Search for Gold, Fed, Dollar, Yields if XAU/USD, else general/forex)
-    const newsCategory = symbol.includes('BTC') || symbol.includes('CRYPTO') ? 'crypto' : 'general';
+    // 2. Fetch Finnhub News dynamically based on asset
+    const newsCategory = symbol.includes('BTC') || symbol.includes('ETH') ? 'crypto' : 'general';
     const finnhubRes = await fetch(`https://finnhub.io/api/v1/news?category=${newsCategory}&token=${FINNHUB_KEY}`);
     const newsData = await finnhubRes.json();
     
     let filteredNews = "";
     if (Array.isArray(newsData)) {
-       const keywords = ['gold', 'xau', 'fed', 'dollar', 'yield', 'rate', 'powell', 'inflation', 'cpi', 'pmi', 'nfp', 'fomc'];
+       let keywords = ['fed', 'rate', 'powell', 'inflation', 'cpi', 'pmi', 'nfp', 'fomc']; // Global keywords
+       if (symbol.includes('XAU') || symbol.includes('XAG')) keywords.push('gold', 'silver', 'xau', 'dollar', 'yield', 'dxy');
+       if (symbol.includes('EUR')) keywords.push('ecb', 'euro', 'eurozone', 'lagarde');
+       if (symbol.includes('GBP')) keywords.push('boe', 'uk', 'bank of england', 'pound');
+       if (symbol.includes('JPY')) keywords.push('boj', 'yen', 'bank of japan');
+       if (symbol.includes('BTC') || symbol.includes('ETH')) keywords.push('crypto', 'bitcoin', 'ethereum', 'etf', 'sec');
+       if (symbol.includes('US100') || symbol.includes('US500') || symbol.includes('US30')) keywords.push('earnings', 'spx', 'nasdaq', 'dow');
+
        const relevant = newsData.filter(n => {
            const text = (n.headline + " " + n.summary).toLowerCase();
            return keywords.some(k => text.includes(k));
@@ -150,14 +162,14 @@ export const handler = async (event: any) => {
     const groq = new Groq({ apiKey: GROQ_API_KEY });
     
     const prompt = `
-You are a Professional Institutional-Style Gold (XAUUSD) Analyst. Your goal is to analyze the following data with extreme precision for the ${interval} timeframe.
+You are a Professional Institutional-Style Multi-Asset Analyst. Your goal is to analyze the following data with extreme precision for ${symbol} on the ${interval} timeframe.
 Apply concepts from "Technical Analysis of the Financial Markets" (John Murphy) and "Japanese Candlestick Charting Techniques" (Steve Nison).
 
 1. PRICE ACTION & MARKET STRUCTURE: Analyze Higher Highs/Lower Lows, BOS, CHOCH, Liquidity, Support/Resistance, and Order Blocks.
-2. CANDLESTICK ANALYSIS: Read the last 5 candles. Identify patterns (e.g. Bullish/Bearish Engulfing, Pin Bars, Doji, Hammer, Morning/Evening Star, Inside/Outside bar). Explain what they mean for the next move.
+2. CANDLESTICK ANALYSIS: Read the last 5 candles. Identify patterns (e.g. Bullish/Bearish Engulfing, Pin Bars, Doji). Explain what they mean for the next move.
 3. TECHNICAL INDICATORS: Analyze EMA 20, 50, 200, RSI, MACD, ATR.
-4. INTERMARKET ANALYSIS: Consider DXY, US10Y Yields, and Fed expectations implied by the news. (Strong DXY/Yields = Bearish Gold, Weak DXY/Yields = Bullish Gold).
-5. NEWS ANALYSIS: Classify news into HIGH IMPACT (FOMC, CPI, NFP, GDP), MEDIUM IMPACT (PMI, Retail Sales), and GEOPOLITICAL. Determine if Bullish, Bearish, or Neutral.
+4. INTERMARKET ANALYSIS: Consider macroeconomic factors implied by the news based on the asset class.
+5. NEWS ANALYSIS: Classify news impact. Determine if Bullish, Bearish, or Neutral for ${symbol}.
 6. FINAL DECISION ENGINE:
    - Technical Analysis = 50%
    - Price Action = 20%
@@ -165,7 +177,14 @@ Apply concepts from "Technical Analysis of the Financial Markets" (John Murphy) 
    - News Impact = 15%
    - Intermarket Analysis = 5%
 
-If confidence is below 35%, output NO TRADE. Never force a signal.
+QUOTEX MODE RULES:
+Estimate the probability for the next candle direction.
+- Confidence < 70% = NO TRADE
+- Confidence 70-80% = Weak Signal
+- Confidence 80-90% = Strong Signal
+- Confidence 90%+ = High Confidence Signal
+
+Do not fake signals. If data quality is weak or confidence is < 70%, return NO TRADE and explain why.
 
 TECHNICAL INDICATORS & CANDLES (${interval} timeframe):
 - Current Price: ${indicators.currentPrice}
@@ -179,27 +198,24 @@ TECHNICAL INDICATORS & CANDLES (${interval} timeframe):
 - Local Resistance: ${indicators.resistance}
 - Last 5 Candles: ${JSON.stringify(indicators.last5Candles)}
 
-FUNDAMENTAL NEWS & SENTIMENT:
+FUNDAMENTAL NEWS & SENTIMENT for ${symbol}:
 ${filteredNews}
 
 Output MUST be strictly JSON exactly matching this schema (Do not write any markdown outside the JSON):
 {
-  "signal": "BUY" | "SELL" | "NO TRADE",
-  "confidence": number,
+  "Asset": "${symbol}",
   "Trend": "string",
   "Market_Structure": "string",
-  "Candlestick_Signal": "string",
-  "News_Sentiment": "string",
-  "DXY_Impact": "string",
-  "Risk_Level": "string",
-  "Recommended_Direction": "BUY" | "SELL" | "NO TRADE",
+  "News_Bias": "string",
+  "Confidence": number,
+  "Risk": "string",
   "Entry_Zone": "string",
-  "Take_Profit": "string",
   "Stop_Loss": "string",
-  "Reasoning": "string",
+  "Take_Profit": "string",
+  "Reason": "string",
   "Next_Candle": "UP" | "DOWN",
-  "Next_Candle_Confidence": number,
-  "Binary_Signal": "CALL" | "PUT" | "NO TRADE"
+  "Binary_Signal": "CALL" | "PUT" | "NO TRADE",
+  "Signal_Strength": "Weak Signal" | "Strong Signal" | "High Confidence Signal" | "NO TRADE"
 }
 `;
 
@@ -215,62 +231,14 @@ Output MUST be strictly JSON exactly matching this schema (Do not write any mark
     
     let aiResult = JSON.parse(aiContent);
     
-    // Normalize case for database
-    const rawSignal = (aiResult.Binary_Signal && aiResult.Binary_Signal !== "NO TRADE") 
-          ? (aiResult.Binary_Signal === "CALL" ? "BUY" : "SELL") 
-          : (aiResult.signal || aiResult.Recommended_Direction || "NO TRADE");
-          
-    const finalSignal = rawSignal.toUpperCase() === "BUY" || rawSignal.toUpperCase() === "UP" || rawSignal.toUpperCase() === "CALL" ? "BUY" 
-                      : rawSignal.toUpperCase() === "SELL" || rawSignal.toUpperCase() === "DOWN" || rawSignal.toUpperCase() === "PUT" ? "SELL" 
-                      : "NEUTRAL";
-
-    // Format a beautiful reasoning for the frontend UI using the new fields
-    const frontendReasoning = `
-Market Structure: ${aiResult.Market_Structure}
-Candlestick Analysis: ${aiResult.Candlestick_Signal}
-Indicators Trend: ${aiResult.Trend}
-News & DXY Impact: ${aiResult.News_Sentiment} (${aiResult.DXY_Impact})
-Reasoning: ${aiResult.Reasoning}
-Entry: ${aiResult.Entry_Zone} | TP: ${aiResult.Take_Profit} | SL: ${aiResult.Stop_Loss}
-`.trim();
-
-    // 4. Save to Supabase
-    const signalRecord = {
-      symbol: symbol,
-      signal: finalSignal,
-      confidence: aiResult.confidence || aiResult.Next_Candle_Confidence || 0,
-      entry_price: indicators.currentPrice,
-      duration_seconds: duration,
-      reasoning: frontendReasoning,
-      risk: aiResult.Risk_Level || "Medium",
-      result: "PENDING",
-      created_at: new Date().toISOString()
-    };
-
-    const supabaseRes = await fetch(`${SUPABASE_URL}/rest/v1/signals`, {
-      method: 'POST',
-      headers: {
-        'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
-        'Content-Type': 'application/json',
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify(signalRecord)
-    });
-
-    if (!supabaseRes.ok) {
-      const dbErr = await supabaseRes.text();
-      console.error("Supabase Insert Error:", dbErr);
-    }
-
-    const savedRecord = supabaseRes.ok ? await supabaseRes.json() : [signalRecord];
-
+    // Format JSON response to pass to the frontend
+    // We send back the exact parsed JSON structure so the frontend can render the beautiful cards
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: true,
-        data: savedRecord[0] || signalRecord
+        data: { ...aiResult, duration_seconds: duration, entry_price: indicators.currentPrice }
       })
     };
 

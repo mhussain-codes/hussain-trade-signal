@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createChart, ColorType, IChartApi, ISeriesApi, Time, CandlestickSeries } from 'lightweight-charts';
 import { useMarketStore } from '../store/useMarketStore';
+import { useAppStore } from '../store/useAppStore';
 
 export const Chart = () => {
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -8,6 +9,7 @@ export const Chart = () => {
   const seriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   
   const { priceHistory, currentPrice } = useMarketStore();
+  const { activeAsset } = useAppStore();
   const [timeframe, setTimeframe] = useState('1m');
 
   useEffect(() => {
@@ -152,10 +154,10 @@ export const Chart = () => {
   const timeframes = ['1m', '5m', '15m', '1h', '4h', '1D'];
 
   return (
-    <div className="glass-card p-4 flex flex-col gap-4">
+      <div className="glass-card p-4 flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold flex items-center gap-2">
-          XAU/USD Live Analysis
+          {activeAsset.name} Live Analysis
         </h3>
         
         <div className="flex gap-1 hidden md:flex">
@@ -163,7 +165,7 @@ export const Chart = () => {
             <button
               key={tf}
               onClick={() => setTimeframe(tf)}
-              className={`px-3 py-1 text-sm rounded transition-colors \${
+              className={`px-3 py-1 text-sm rounded transition-colors ${
                 timeframe === tf 
                   ? 'bg-primary text-background font-medium' 
                   : 'text-text-muted hover:text-text hover:bg-white/5'
@@ -183,7 +185,7 @@ export const Chart = () => {
       >
         <div className="absolute top-4 left-4 z-10 flex flex-col pointer-events-none">
            <span className="text-3xl font-bold font-mono text-white tracking-wider">${currentPrice.toFixed(2)}</span>
-           <span className="text-sm text-primary font-medium tracking-widest uppercase">Gold Spot / US Dollar</span>
+           <span className="text-sm text-primary font-medium tracking-widest uppercase">{activeAsset.name} / {activeAsset.symbol}</span>
         </div>
 
         {/* AI CHART ANALYSIS OVERLAY (TOOLTIP) */}

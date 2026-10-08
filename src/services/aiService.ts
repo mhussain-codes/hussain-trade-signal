@@ -1,6 +1,6 @@
 export interface AIAnalysisResult {
   success?: boolean;
-  data?: {
+  data?: any; _old?: {
     symbol: string;
     signal: 'BUY' | 'SELL' | 'NEUTRAL';
     confidence: number;
@@ -17,6 +17,7 @@ export interface AIAnalysisResult {
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const generateSignal = async (
+  symbol: string,
   licenseKey: string,
   duration: number,
   currentPrice: number,
@@ -37,7 +38,7 @@ export const generateSignal = async (
       const response = await fetch('/.netlify/functions/generate-signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licenseKey, duration, currentPrice, candleData }),
+        body: JSON.stringify({ licenseKey, symbol, duration, currentPrice, candleData }),
         signal: controller.signal
       });
       
