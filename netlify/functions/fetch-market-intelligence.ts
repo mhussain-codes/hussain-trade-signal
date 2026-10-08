@@ -78,7 +78,7 @@ Respond ONLY with a JSON object exactly matching this schema:
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: 'llama-3.1-8b-instant', // DIRECT WORKING MODEL ADDED HERE
+      model: 'openai/gpt-oss-120b', // DIRECT WORKING MODEL ADDED HERE
       temperature: 0.5,
       response_format: { type: "json_object" }
     });

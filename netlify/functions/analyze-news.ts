@@ -50,7 +50,7 @@ Respond ONLY with a valid JSON object matching exactly this schema, with no mark
           content: prompt
         }
       ],
-      model: 'llama-3.1-8b-instant', // DIRECT WORKING MODEL ADDED HERE
+      model: 'openai/gpt-oss-120b', // DIRECT WORKING MODEL ADDED HERE
       temperature: 0.5,
       response_format: { type: "json_object" }
     });
