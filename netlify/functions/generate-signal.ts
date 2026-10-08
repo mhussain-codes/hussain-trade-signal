@@ -14,7 +14,11 @@ function calculateIndicators(candles: any[]) {
   };
   
   const ema9 = calculateEMA(closes, 9);
+  const ema20 = calculateEMA(closes, 20);
   const ema21 = calculateEMA(closes, 21);
+  const ema50 = calculateEMA(closes, 50);
+  const ema200 = calculateEMA(closes, 200);
+  
   const ema12 = calculateEMA(closes, 12);
   const ema26 = calculateEMA(closes, 26);
   const macd = ema12 - ema26;
@@ -56,16 +60,28 @@ function calculateIndicators(candles: any[]) {
   const last50 = candles.slice(-50);
   const resistance = Math.max(...last50.map(c => c.high));
   const support = Math.min(...last50.map(c => c.low));
+  
+  // Last 5 Candles for pattern recognition
+  const last5Candles = candles.slice(-5).map(c => ({
+      open: c.open,
+      high: c.high,
+      low: c.low,
+      close: c.close
+  }));
 
   return {
     currentPrice: closes[closes.length - 1],
     ema9: Number(ema9.toFixed(4)),
+    ema20: Number(ema20.toFixed(4)),
     ema21: Number(ema21.toFixed(4)),
+    ema50: Number(ema50.toFixed(4)),
+    ema200: Number(ema200.toFixed(4)),
     rsi: Number(rsi.toFixed(2)),
     macd: Number(macd.toFixed(4)),
     atr: Number(atr.toFixed(4)),
     support: Number(support.toFixed(4)),
     resistance: Number(resistance.toFixed(4)),
+    last5Candles: last5Candles
   };
 }
 
@@ -94,8 +110,8 @@ export const handler = async (event: any) => {
     // Interval mapped from duration
     const interval = duration >= 300 ? '5min' : '1min';
 
-    // 1. Fetch TwelveData Candles
-    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=100&apikey=${TWELVE_DATA_KEY}`);
+    // 1. Fetch TwelveData Candles (Fetching 250 for EMA200 accuracy)
+    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=250&apikey=${TWELVE_DATA_KEY}`);
     const timeSeriesData = await twelveDataRes.json();
     
     if (!timeSeriesData.values || timeSeriesData.values.length === 0) {
@@ -119,8 +135,7 @@ export const handler = async (event: any) => {
     
     let filteredNews = "";
     if (Array.isArray(newsData)) {
-       // Find news containing relevant keywords
-       const keywords = ['gold', 'xau', 'fed', 'dollar', 'yield', 'rate', 'powell', 'inflation', 'cpi'];
+       const keywords = ['gold', 'xau', 'fed', 'dollar', 'yield', 'rate', 'powell', 'inflation', 'cpi', 'pmi', 'nfp', 'fomc'];
        const relevant = newsData.filter(n => {
            const text = (n.headline + " " + n.summary).toLowerCase();
            return keywords.some(k => text.includes(k));
@@ -135,33 +150,63 @@ export const handler = async (event: any) => {
     const groq = new Groq({ apiKey: GROQ_API_KEY });
     
     const prompt = `
-You are an elite quantitative analyst. Analyze the Twelve Data technicals and Finnhub news. Your goal is extreme accuracy (90%+). Only output a BUY or SELL signal if both technicals and news align perfectly with a confidence score of 80% or higher. If the market is choppy, data is conflicting, or confidence is below 80%, you MUST return a signal of "NEUTRAL". Do not guess.
+You are a Professional Institutional-Style Gold (XAUUSD) Analyst. Your goal is to analyze the following data with extreme precision for the ${interval} timeframe.
+Apply concepts from "Technical Analysis of the Financial Markets" (John Murphy) and "Japanese Candlestick Charting Techniques" (Steve Nison).
 
-TECHNICAL INDICATORS (${interval} timeframe):
+1. PRICE ACTION & MARKET STRUCTURE: Analyze Higher Highs/Lower Lows, BOS, CHOCH, Liquidity, Support/Resistance, and Order Blocks.
+2. CANDLESTICK ANALYSIS: Read the last 5 candles. Identify patterns (e.g. Bullish/Bearish Engulfing, Pin Bars, Doji, Hammer, Morning/Evening Star, Inside/Outside bar). Explain what they mean for the next move.
+3. TECHNICAL INDICATORS: Analyze EMA 20, 50, 200, RSI, MACD, ATR.
+4. INTERMARKET ANALYSIS: Consider DXY, US10Y Yields, and Fed expectations implied by the news. (Strong DXY/Yields = Bearish Gold, Weak DXY/Yields = Bullish Gold).
+5. NEWS ANALYSIS: Classify news into HIGH IMPACT (FOMC, CPI, NFP, GDP), MEDIUM IMPACT (PMI, Retail Sales), and GEOPOLITICAL. Determine if Bullish, Bearish, or Neutral.
+6. FINAL DECISION ENGINE:
+   - Technical Analysis = 50%
+   - Price Action = 20%
+   - Candlestick Analysis = 10%
+   - News Impact = 15%
+   - Intermarket Analysis = 5%
+
+If confidence is below 70%, output NO TRADE. Never force a signal.
+
+TECHNICAL INDICATORS & CANDLES (${interval} timeframe):
 - Current Price: ${indicators.currentPrice}
-- EMA 9: ${indicators.ema9}
-- EMA 21: ${indicators.ema21}
+- EMA 20: ${indicators.ema20}
+- EMA 50: ${indicators.ema50}
+- EMA 200: ${indicators.ema200}
 - RSI 14: ${indicators.rsi}
 - MACD: ${indicators.macd}
 - ATR 14: ${indicators.atr}
 - Local Support: ${indicators.support}
 - Local Resistance: ${indicators.resistance}
+- Last 5 Candles: ${JSON.stringify(indicators.last5Candles)}
 
 FUNDAMENTAL NEWS & SENTIMENT:
 ${filteredNews}
 
-Do not write any markdown outside the JSON. The JSON must exactly match this schema:
+Output MUST be strictly JSON exactly matching this schema (Do not write any markdown outside the JSON):
 {
-  "signal": "BUY" | "SELL" | "NEUTRAL",
+  "signal": "BUY" | "SELL" | "NO TRADE",
   "confidence": number,
-  "reasoning": "string"
+  "Trend": "string",
+  "Market_Structure": "string",
+  "Candlestick_Signal": "string",
+  "News_Sentiment": "string",
+  "DXY_Impact": "string",
+  "Risk_Level": "string",
+  "Recommended_Direction": "BUY" | "SELL" | "NO TRADE",
+  "Entry_Zone": "string",
+  "Take_Profit": "string",
+  "Stop_Loss": "string",
+  "Reasoning": "string",
+  "Next_Candle": "UP" | "DOWN",
+  "Next_Candle_Confidence": number,
+  "Binary_Signal": "CALL" | "PUT" | "NO TRADE"
 }
 `;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
       model: 'openai/gpt-oss-120b',
-      temperature: 0.5,
+      temperature: 0.2,
       response_format: { type: "json_object" }
     });
 
@@ -170,21 +215,34 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     
     let aiResult = JSON.parse(aiContent);
     
-    // Normalize case
-    if (aiResult.signal.toUpperCase() === "BUY") aiResult.signal = "UP"; 
-    const finalSignal = aiResult.signal.toUpperCase() === "BUY" || aiResult.signal.toUpperCase() === "UP" ? "BUY" 
-                      : aiResult.signal.toUpperCase() === "SELL" || aiResult.signal.toUpperCase() === "DOWN" ? "SELL" 
+    // Normalize case for database
+    const rawSignal = (aiResult.Binary_Signal && aiResult.Binary_Signal !== "NO TRADE") 
+          ? (aiResult.Binary_Signal === "CALL" ? "BUY" : "SELL") 
+          : (aiResult.signal || aiResult.Recommended_Direction || "NO TRADE");
+          
+    const finalSignal = rawSignal.toUpperCase() === "BUY" || rawSignal.toUpperCase() === "UP" || rawSignal.toUpperCase() === "CALL" ? "BUY" 
+                      : rawSignal.toUpperCase() === "SELL" || rawSignal.toUpperCase() === "DOWN" || rawSignal.toUpperCase() === "PUT" ? "SELL" 
                       : "NEUTRAL";
+
+    // Format a beautiful reasoning for the frontend UI using the new fields
+    const frontendReasoning = `
+Market Structure: ${aiResult.Market_Structure}
+Candlestick Analysis: ${aiResult.Candlestick_Signal}
+Indicators Trend: ${aiResult.Trend}
+News & DXY Impact: ${aiResult.News_Sentiment} (${aiResult.DXY_Impact})
+Reasoning: ${aiResult.Reasoning}
+Entry: ${aiResult.Entry_Zone} | TP: ${aiResult.Take_Profit} | SL: ${aiResult.Stop_Loss}
+`.trim();
 
     // 4. Save to Supabase
     const signalRecord = {
       symbol: symbol,
       signal: finalSignal,
-      confidence: aiResult.confidence,
+      confidence: aiResult.confidence || aiResult.Next_Candle_Confidence || 0,
       entry_price: indicators.currentPrice,
       duration_seconds: duration,
-      reasoning: aiResult.reasoning,
-      risk: aiResult.risk || "Medium",
+      reasoning: frontendReasoning,
+      risk: aiResult.Risk_Level || "Medium",
       result: "PENDING",
       created_at: new Date().toISOString()
     };
