@@ -160,7 +160,7 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile',
       temperature: 0.5,
       response_format: { type: "json_object" }
     });
