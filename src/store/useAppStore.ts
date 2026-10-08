@@ -8,10 +8,10 @@ export interface SignalHistory {
   direction: 'UP' | 'DOWN' | 'NEUTRAL';
   confidence: number;
   duration: number; // in seconds
-  strength: 'Weak' | 'Medium' | 'Strong' | 'None';
+  strength: 'Low' | 'Medium' | 'High' | 'Weak' | 'Strong' | 'None';
   sentiment: 'Bullish' | 'Bearish' | 'Neutral';
   status: 'Pending' | 'Completed';
-  result?: 'Direction moved UP' | 'Direction moved DOWN' | 'Unable to verify' | 'Neutral';
+  result?: 'WIN' | 'LOSS' | 'PENDING' | 'NEUTRAL' | 'Unable to verify' | 'Evaluating...';
   entryPrice?: number;
   exitPrice?: number;
 }

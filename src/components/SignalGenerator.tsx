@@ -39,10 +39,11 @@ export const SignalGenerator = () => {
         time: Date.now(),
         price: currentPrice,
         entryPrice: resultData.entry_price || currentPrice,
-        direction: direction,
+        direction: direction as 'UP' | 'DOWN' | 'NEUTRAL',
         confidence: resultData.confidence,
         duration: resultData.duration_seconds,
-        strength: resultData.risk || 'Medium',
+        strength: (resultData.risk || 'Medium') as 'Low' | 'Medium' | 'High' | 'Weak' | 'Strong' | 'None',
+        sentiment: (direction === 'UP' ? 'Bullish' : direction === 'DOWN' ? 'Bearish' : 'Neutral') as 'Bullish' | 'Bearish' | 'Neutral',
         reason: resultData.reasoning,
         status: 'Pending' as const
       };
