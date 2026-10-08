@@ -215,7 +215,6 @@ export const verifyLicense = async (licenseKey: string): Promise<boolean> => {
   if (!licenseKey) return false;
   
   try {
-    // Atomic one-time activation
     const { data, error } = await supabase
       .from('licenses')
       .update({ 
@@ -223,38 +222,21 @@ export const verifyLicense = async (licenseKey: string): Promise<boolean> => {
         activated_at: new Date().toISOString()
       })
       .eq('license_key', licenseKey.trim())
-      .eq('active', true)
       .eq('used', false)
+      .eq('active', true)
       .select();
       
-    if (error) {
-      console.error("Supabase Error:", error);
-      throw new Error(`Database Error: ${error.message}`);
-    }
-    
-    if (!data || data.length === 0) {
-      // Check why it failed to provide a specific error message
-      const { data: checkData } = await supabase
-        .from('licenses')
-        .select('active, used')
-        .eq('license_key', licenseKey.trim())
-        .maybeSingle();
-        
-      if (!checkData) {
-        throw new Error("Invalid License Key");
-      }
-      if (checkData.active === false) {
-        throw new Error("License has been suspended");
-      }
-      if (checkData.used === true) {
-        throw new Error("This license key has already been used and cannot be reused.");
-      }
-      throw new Error("Invalid License Key");
+    console.log(`[AUTH] Input Key: ${licenseKey.trim()}`);
+    console.log(`[AUTH] Returned Row Count: ${data ? data.length : 0}`);
+    console.log(`[AUTH] Authentication Result: ${error || !data || data.length === 0 ? 'REJECTED' : 'SUCCESS'}`);
+
+    if (error || !data || data.length === 0) {
+      throw new Error("This license key has already been used on another device or is invalid.");
     }
     
     return true;
   } catch (error: any) {
-    throw new Error(error.message || "Failed to verify license");
+    throw new Error(error.message);
   }
 };
 
