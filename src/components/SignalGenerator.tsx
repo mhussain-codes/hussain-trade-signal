@@ -106,7 +106,7 @@ export const SignalGenerator = () => {
             {loading ? (
               <><Loader2 className="w-6 h-6 animate-spin" /> Analyzing market conditions...</>
             ) : (
-              `GENERATE \${defaultDuration / 60} MIN SIGNAL`
+              `GENERATE ${defaultDuration >= 60 ? defaultDuration / 60 : defaultDuration} ${defaultDuration >= 60 ? 'MIN' : 'SEC'} SIGNAL`
             )}
           </button>
           

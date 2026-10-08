@@ -34,7 +34,7 @@ export const generateSignal = async (
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout per request
 
     try {
-      const response = await fetch('/.netlify/functions/advanced-generate-signal', {
+      const response = await fetch('/.netlify/functions/generate-signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenseKey, duration, currentPrice, candleData }),

@@ -1,141 +1,227 @@
 import Groq from 'groq-sdk';
-import { verifyLicense } from './utils/license';
-import { GROQ_MODEL, GROQ_TEMPERATURE } from './utils/groq-config';
-import { parseStringPromise } from 'xml2js';
 
-export const handler = async (event) => {
+// Helper to calculate indicators
+function calculateIndicators(candles: any[]) {
+  const closes = candles.map(c => c.close);
+  
+  const calculateEMA = (data: number[], period: number) => {
+    const k = 2 / (period + 1);
+    let ema = data[0];
+    for (let i = 1; i < data.length; i++) {
+      ema = (data[i] - ema) * k + ema;
+    }
+    return ema;
+  };
+  
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const ema12 = calculateEMA(closes, 12);
+  const ema26 = calculateEMA(closes, 26);
+  const macd = ema12 - ema26;
+
+  // RSI 14
+  let avgGain = 0, avgLoss = 0;
+  if (closes.length > 14) {
+    let gains = 0, losses = 0;
+    for(let i = 1; i <= 14; i++) {
+       const diff = closes[i] - closes[i-1];
+       if (diff > 0) gains += diff;
+       else losses -= diff;
+    }
+    avgGain = gains / 14;
+    avgLoss = losses / 14;
+    for(let i = 15; i < closes.length; i++) {
+       const diff = closes[i] - closes[i-1];
+       const gain = diff > 0 ? diff : 0;
+       const loss = diff < 0 ? -diff : 0;
+       avgGain = (avgGain * 13 + gain) / 14;
+       avgLoss = (avgLoss * 13 + loss) / 14;
+    }
+  }
+  const rs = avgGain / (avgLoss === 0 ? 1 : avgLoss);
+  const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+
+  // ATR 14
+  const tr = [];
+  for(let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevClose = candles[i-1].close;
+    tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+  }
+  const recentTR = tr.slice(-14);
+  const atr = recentTR.length ? recentTR.reduce((a,b)=>a+b,0)/recentTR.length : 0;
+
+  // Support & Resistance (Last 50)
+  const last50 = candles.slice(-50);
+  const resistance = Math.max(...last50.map(c => c.high));
+  const support = Math.min(...last50.map(c => c.low));
+
+  return {
+    currentPrice: closes[closes.length - 1],
+    ema9: Number(ema9.toFixed(4)),
+    ema21: Number(ema21.toFixed(4)),
+    rsi: Number(rsi.toFixed(2)),
+    macd: Number(macd.toFixed(4)),
+    atr: Number(atr.toFixed(4)),
+    support: Number(support.toFixed(4)),
+    resistance: Number(resistance.toFixed(4)),
+  };
+}
+
+export const handler = async (event: any) => {
   if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, body: 'Method Not Allowed' };
+    return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed. Use POST.' }) };
   }
 
-  const apiKey = (process.env.GROQ_API_KEY || '').trim();
+  const TWELVE_DATA_KEY = (process.env.TWELVE_DATA_KEY || '').trim();
+  const FINNHUB_KEY = (process.env.FINNHUB_KEY || '').trim();
+  const GROQ_API_KEY = (process.env.GROQ_API_KEY || '').trim();
   
-  if (!apiKey) {
-    return {
-      statusCode: 503,
-      body: JSON.stringify({ error: 'Configuration Error: GROQ_API_KEY is missing from environment' })
-    };
+  const rawUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
+  const SUPABASE_URL = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+  const SUPABASE_SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
+  if (!TWELVE_DATA_KEY || !FINNHUB_KEY || !GROQ_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+    return { statusCode: 500, body: JSON.stringify({ error: 'Data unavailable (Missing Environment Keys)' }) };
   }
 
   try {
-    const { licenseKey, duration, currentPrice, candleData } = JSON.parse(event.body || '{}');
+    const body = JSON.parse(event.body || '{}');
+    const symbol = body.symbol || 'XAU/USD';
+    const duration = body.duration || 60; // 60, 120, 300
     
-    // VERIFY LICENSE
-    const licenseResult = await verifyLicense(licenseKey);
+    // Interval mapped from duration
+    const interval = duration >= 300 ? '5min' : '1min';
+
+    // 1. Fetch TwelveData Candles
+    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=\${symbol}&interval=\${interval}&outputsize=100&apikey=\${TWELVE_DATA_KEY}`);
+    const timeSeriesData = await twelveDataRes.json();
     
-    if (!licenseResult.valid) {
-      return {
-        statusCode: 401,
-        body: JSON.stringify({ error: licenseResult.error })
-      };
+    if (!timeSeriesData.values || timeSeriesData.values.length === 0) {
+      throw new Error("TwelveData API returned empty or error response");
     }
 
-    // Fetch real RSS news
-    const feeds = ['https://www.kitco.com/news/rss'];
-    let rawHeadlines = [];
-    try {
-        for (const feed of feeds) {
-            const res = await fetch(feed);
-            if(res.ok) {
-                const xml = await res.text();
-                const json = await parseStringPromise(xml);
-                const items = json?.rss?.channel?.[0]?.item || [];
-                items.slice(0, 15).forEach(item => {
-                    rawHeadlines.push({
-                        title: item.title?.[0] || '',
-                        pubDate: item.pubDate?.[0] || new Date().toISOString()
-                    });
-                });
-            }
-        }
-    } catch(e) {
-        console.error("RSS Fetch Error:", e);
-        rawHeadlines = [
-            { title: "Gold Prices Surge as Fed Hints at Rate Cuts", pubDate: new Date().toISOString() },
-            { title: "Geopolitical Tensions Drive Safe Haven Demand", pubDate: new Date().toISOString() }
-        ];
-    }
-    const newsContext = rawHeadlines.map(h => h.title).join(' | ');
+    // TwelveData returns newest first. Reverse to get oldest to newest for calculations.
+    const rawCandles = timeSeriesData.values.reverse().map((c: any) => ({
+      open: parseFloat(c.open),
+      high: parseFloat(c.high),
+      low: parseFloat(c.low),
+      close: parseFloat(c.close)
+    }));
 
-    // Process Candle Data for technical analysis
-    let technicalContext = "No candle data provided. Relying solely on current price.";
-    if (candleData && candleData.length > 0) {
-       const recent = candleData.slice(-10); // Look at last 10 ticks
-       const start = recent[0];
-       const end = recent[recent.length - 1];
-       const trend = end.close > start.open ? 'BULLISH' : 'BEARISH';
-       const highest = Math.max(...recent.map(c => c.high));
-       const lowest = Math.min(...recent.map(c => c.low));
-       technicalContext = `Recent 10-tick OHLC Analysis: Trend is \${trend}. Local High: $\${highest.toFixed(2)}, Local Low: $\${lowest.toFixed(2)}. Latest Close: $\${end.close.toFixed(2)}.`;
+    const indicators = calculateIndicators(rawCandles);
+
+    // 2. Fetch Finnhub News (Search for Gold, Fed, Dollar, Yields if XAU/USD, else general/forex)
+    const newsCategory = symbol.includes('BTC') || symbol.includes('CRYPTO') ? 'crypto' : 'general';
+    const finnhubRes = await fetch(`https://finnhub.io/api/v1/news?category=\${newsCategory}&token=\${FINNHUB_KEY}`);
+    const newsData = await finnhubRes.json();
+    
+    let filteredNews = "";
+    if (Array.isArray(newsData)) {
+       // Find news containing relevant keywords
+       const keywords = ['gold', 'xau', 'fed', 'dollar', 'yield', 'rate', 'powell', 'inflation', 'cpi'];
+       const relevant = newsData.filter(n => {
+           const text = (n.headline + " " + n.summary).toLowerCase();
+           return keywords.some(k => text.includes(k));
+       });
+       const topNews = relevant.length > 0 ? relevant.slice(0, 5) : newsData.slice(0, 5);
+       filteredNews = topNews.map(n => n.headline).join(' | ');
+    } else {
+       filteredNews = "No news available.";
     }
 
-    const groq = new Groq({ apiKey });
-
+    // 3. Prompt Groq (llama-3.3-70b-versatile)
+    const groq = new Groq({ apiKey: GROQ_API_KEY });
+    
     const prompt = `
-You are an advanced quantitative AI trading engine analyzing XAU/USD (Gold).
-Current Price: $\${currentPrice.toFixed(2)}
-Requested Duration: \${duration} seconds
+You are an elite quantitative analyst. Analyze the provided Twelve Data technicals and Finnhub fundamental news. Your goal is extreme accuracy (90-95%). You must only output a BUY or SELL signal if both technicals and news align perfectly giving you a confidence score of 75% or higher. If the market is choppy, unclear, or confidence is below 75%, you MUST return a signal of "NEUTRAL" with a brief explanation of why the market is undecided.
 
-REAL-TIME DATA INPUTS:
-1. Technical Market Structure: \${technicalContext}
-2. Latest Global News Headlines: \${newsContext}
+TECHNICAL INDICATORS (\${interval} timeframe):
+- Current Price: \${indicators.currentPrice}
+- EMA 9: \${indicators.ema9}
+- EMA 21: \${indicators.ema21}
+- RSI 14: \${indicators.rsi}
+- MACD: \${indicators.macd}
+- ATR 14: \${indicators.atr}
+- Local Support: \${indicators.support}
+- Local Resistance: \${indicators.resistance}
 
-TASK:
-Perform a highly rigorous evaluation fusing the Technical Market Structure and Latest Global News.
-Do NOT default to "UP". 
-You must synthesize the real-time inputs.
-Create a weighted scoring system internally (News Sentiment vs Technical Structure).
-If the combined confidence is weak or contradictory, output "NEUTRAL" for direction.
+FUNDAMENTAL NEWS & SENTIMENT:
+\${filteredNews}
 
-Respond ONLY with a valid JSON object matching exactly this schema (NO MARKDOWN, JUST JSON):
+Do not write any markdown outside the JSON. The JSON must exactly match this schema:
 {
-  "direction": "UP" | "DOWN" | "NEUTRAL",
-  "confidence": number (between 0 and 99. <50 must be NEUTRAL),
-  "strength": "Weak" | "Medium" | "Strong" | "None",
-  "sentiment": "Bullish" | "Bearish" | "Neutral",
-  "reason": "Clear explanation of the dominant market drivers right now, explicitly citing the news and technicals.",
-  "bullishFactors": ["factor 1", "factor 2"],
-  "bearishFactors": ["factor 1", "factor 2"],
-  "technicalImpact": "Description of technical structure",
-  "newsImpact": "Description of fundamental news drivers"
+  "signal": "BUY" | "SELL" | "NEUTRAL",
+  "confidence": number,
+  "reasoning": "string"
 }
-`;
+\`;
 
     const chatCompletion = await groq.chat.completions.create({
-      messages: [
-        {
-          role: "user",
-          content: prompt
-        }
-      ],
-      model: GROQ_MODEL,
-      temperature: GROQ_TEMPERATURE,
+      messages: [{ role: "user", content: prompt }],
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.5,
       response_format: { type: "json_object" }
     });
 
-    const responseText = chatCompletion.choices[0]?.message?.content;
+    const aiContent = chatCompletion.choices[0]?.message?.content;
+    if (!aiContent) throw new Error("AI returned empty response");
+    
+    let aiResult = JSON.parse(aiContent);
+    
+    // Normalize case
+    if (aiResult.signal.toUpperCase() === "BUY") aiResult.signal = "UP"; 
+    const finalSignal = aiResult.signal.toUpperCase() === "BUY" || aiResult.signal.toUpperCase() === "UP" ? "BUY" 
+                      : aiResult.signal.toUpperCase() === "SELL" || aiResult.signal.toUpperCase() === "DOWN" ? "SELL" 
+                      : "NEUTRAL";
 
-    if (!responseText) {
-      throw new Error("Empty response from AI");
+    // 4. Save to Supabase
+    const signalRecord = {
+      symbol: symbol,
+      signal: finalSignal,
+      confidence: aiResult.confidence,
+      entry_price: indicators.currentPrice,
+      duration_seconds: duration,
+      reasoning: aiResult.reasoning,
+      risk: aiResult.risk || "Medium",
+      result: "PENDING",
+      created_at: new Date().toISOString()
+    };
+
+    const supabaseRes = await fetch(`\${SUPABASE_URL}/rest/v1/signals`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_SERVICE_KEY,
+        'Authorization': `Bearer \${SUPABASE_SERVICE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(signalRecord)
+    });
+
+    if (!supabaseRes.ok) {
+      const dbErr = await supabaseRes.text();
+      console.error("Supabase Insert Error:", dbErr);
     }
 
-    const result = JSON.parse(responseText);
-    result.duration = duration;
+    const savedRecord = supabaseRes.ok ? await supabaseRes.json() : [signalRecord];
 
     return {
       statusCode: 200,
-      body: JSON.stringify(result)
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        success: true,
+        data: savedRecord[0] || signalRecord
+      })
     };
+
   } catch (error: any) {
-    console.error("Groq API Error:", error);
-    
-    // Handle Groq specific error formats
-    const errorMessage = error?.error?.error?.message || error.message || 'Failed to generate AI signal';
-    const status = error.status || 500;
-    
+    console.error("Signal Generation Error:", error);
     return {
-      statusCode: status,
-      body: JSON.stringify({ error: errorMessage })
+      statusCode: 500,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ error: 'Data unavailable' }) // Strict error message per user request
     };
   }
 };

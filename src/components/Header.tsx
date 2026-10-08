@@ -38,6 +38,9 @@ export const Header = ({ title }: { title: string }) => {
             onChange={(e) => setDefaultDuration(Number(e.target.value))}
             className="bg-transparent text-xs md:text-sm font-medium focus:outline-none cursor-pointer"
           >
+            <option value={10} className="bg-background">10 Sec Trade</option>
+            <option value={15} className="bg-background">15 Sec Trade</option>
+            <option value={30} className="bg-background">30 Sec Trade</option>
             <option value={60} className="bg-background">1 Min Trade</option>
             <option value={120} className="bg-background">2 Min Trade</option>
             <option value={300} className="bg-background">5 Min Trade</option>
