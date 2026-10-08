@@ -54,8 +54,7 @@ export const SignalGenerator = () => {
       
     } catch (err: any) {
       console.error("Backend Error:", err);
-      // Strictly show "Data unavailable" on error
-      setError("Data unavailable");
+      setError(err.message || "An unknown error occurred during analysis.");
     } finally {
       setLoading(false);
     }

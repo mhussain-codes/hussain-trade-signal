@@ -135,7 +135,7 @@ export const handler = async (event: any) => {
     const groq = new Groq({ apiKey: GROQ_API_KEY });
     
     const prompt = `
-You are an elite quantitative analyst. Analyze the provided Twelve Data technicals and Finnhub fundamental news. Your goal is extreme accuracy (90-95%). You must only output a BUY or SELL signal if both technicals and news align perfectly giving you a confidence score of 75% or higher. If the market is choppy, unclear, or confidence is below 75%, you MUST return a signal of "NEUTRAL" with a brief explanation of why the market is undecided.
+You are an elite quantitative analyst. Analyze the Twelve Data technicals and Finnhub news. Your goal is extreme accuracy (90%+). Only output a BUY or SELL signal if both technicals and news align perfectly with a confidence score of 80% or higher. If the market is choppy, data is conflicting, or confidence is below 80%, you MUST return a signal of "NEUTRAL". Do not guess.
 
 TECHNICAL INDICATORS (\${interval} timeframe):
 - Current Price: \${indicators.currentPrice}
@@ -221,7 +221,7 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Data unavailable' }) // Strict error message per user request
+      body: JSON.stringify({ error: error.message || 'An unknown error occurred' }) 
     };
   }
 };

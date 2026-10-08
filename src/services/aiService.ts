@@ -62,10 +62,10 @@ export const generateSignal = async (
         }
         
         if (isRetriable) {
-          throw new Error("AI service is temporarily busy. Please try again in a few moments.");
+          throw new Error(data.error || "AI service is temporarily busy. Please try again in a few moments.");
         }
         
-        throw new Error("AI service is temporarily busy. Please try again in a few moments.");
+        throw new Error(data.error || "Failed to generate signal.");
       }
 
       return data as AIAnalysisResult;
@@ -106,11 +106,11 @@ export const generateSignal = async (
       }
       
       console.error("[AI Service] Unhandled final error:", err);
-      throw new Error("AI service is temporarily busy. Please try again in a few moments.");
+      throw err;
     }
   }
   
-  throw new Error("AI service is temporarily busy. Please try again in a few moments.");
+  throw new Error("AI service unavailable after retries.");
 };
 
 export interface NewsAnalysisResult {
