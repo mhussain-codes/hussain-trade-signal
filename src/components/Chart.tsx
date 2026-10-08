@@ -98,6 +98,7 @@ export const Chart = () => {
   }, [priceHistory]);
 
   const [isTooltipVisible, setIsTooltipVisible] = useState(false);
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!chartRef.current) return;
@@ -107,10 +108,34 @@ export const Chart = () => {
         param.point === undefined ||
         !param.time ||
         param.point.x < 0 ||
-        param.point.y < 0
+        param.point.y < 0 ||
+        param.point.x > (chartContainerRef.current?.clientWidth ?? 0) ||
+        param.point.y > (chartContainerRef.current?.clientHeight ?? 0)
       ) {
         setIsTooltipVisible(false);
       } else {
+        const containerWidth = chartContainerRef.current?.clientWidth ?? 0;
+        const containerHeight = chartContainerRef.current?.clientHeight ?? 0;
+        
+        // Tooltip dimensions (approx)
+        const tooltipWidth = 200; 
+        const tooltipHeight = 150;
+        const margin = 15;
+
+        let x = param.point.x + margin;
+        let y = param.point.y + margin;
+
+        // Prevent overflow right
+        if (x + tooltipWidth > containerWidth) {
+          x = param.point.x - tooltipWidth - margin;
+        }
+
+        // Prevent overflow bottom
+        if (y + tooltipHeight > containerHeight) {
+          y = param.point.y - tooltipHeight - margin;
+        }
+
+        setTooltipPos({ x, y });
         setIsTooltipVisible(true);
       }
     };
@@ -162,31 +187,37 @@ export const Chart = () => {
         </div>
 
         {/* AI CHART ANALYSIS OVERLAY (TOOLTIP) */}
-        {isTooltipVisible && (
-          <div className="absolute top-4 right-4 z-10 hidden md:flex flex-col gap-2 bg-background/90 backdrop-blur-md p-3 rounded-lg border border-white/10 w-48 shadow-xl pointer-events-none transition-opacity">
-            <div className="text-xs text-text-muted font-bold uppercase border-b border-white/10 pb-1 mb-1">Market Structure</div>
-            <div className="flex justify-between text-xs">
-                <span className="text-text-muted">Trend</span>
-                <span className="text-success font-bold">BULLISH</span>
-            </div>
-            <div className="flex justify-between text-xs">
-                <span className="text-text-muted">Resistance</span>
-                <span className="font-mono">{(currentPrice + 12.5).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-                <span className="text-text-muted">Support</span>
-                <span className="font-mono">{(currentPrice - 8.3).toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-xs">
-                <span className="text-text-muted">Momentum</span>
-                <span className="text-primary font-bold">STRONG</span>
-            </div>
-            <div className="flex justify-between text-xs">
-                <span className="text-text-muted">Volatility</span>
-                <span className="text-warning font-bold">ELEVATED</span>
-            </div>
+        <div 
+          className={`absolute z-20 flex-col gap-2 bg-background/90 backdrop-blur-md p-3 rounded-lg border border-white/10 w-48 shadow-xl pointer-events-none transition-opacity duration-200 ease-in-out flex \${
+            isTooltipVisible ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{
+            left: `${tooltipPos.x}px`,
+            top: `${tooltipPos.y}px`,
+          }}
+        >
+          <div className="text-xs text-text-muted font-bold uppercase border-b border-white/10 pb-1 mb-1">Market Structure</div>
+          <div className="flex justify-between text-xs">
+              <span className="text-text-muted">Trend</span>
+              <span className="text-success font-bold">BULLISH</span>
           </div>
-        )}
+          <div className="flex justify-between text-xs">
+              <span className="text-text-muted">Resistance</span>
+              <span className="font-mono">{(currentPrice + 12.5).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+              <span className="text-text-muted">Support</span>
+              <span className="font-mono">{(currentPrice - 8.3).toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between text-xs">
+              <span className="text-text-muted">Momentum</span>
+              <span className="text-primary font-bold">STRONG</span>
+          </div>
+          <div className="flex justify-between text-xs">
+              <span className="text-text-muted">Volatility</span>
+              <span className="text-warning font-bold">ELEVATED</span>
+          </div>
+        </div>
       </div>
     </div>
   );
