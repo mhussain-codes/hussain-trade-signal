@@ -95,7 +95,7 @@ export const handler = async (event: any) => {
     const interval = duration >= 300 ? '5min' : '1min';
 
     // 1. Fetch TwelveData Candles
-    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=\${symbol}&interval=\${interval}&outputsize=100&apikey=\${TWELVE_DATA_KEY}`);
+    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=${symbol}&interval=${interval}&outputsize=100&apikey=${TWELVE_DATA_KEY}`);
     const timeSeriesData = await twelveDataRes.json();
     
     if (!timeSeriesData.values || timeSeriesData.values.length === 0) {
@@ -114,7 +114,7 @@ export const handler = async (event: any) => {
 
     // 2. Fetch Finnhub News (Search for Gold, Fed, Dollar, Yields if XAU/USD, else general/forex)
     const newsCategory = symbol.includes('BTC') || symbol.includes('CRYPTO') ? 'crypto' : 'general';
-    const finnhubRes = await fetch(`https://finnhub.io/api/v1/news?category=\${newsCategory}&token=\${FINNHUB_KEY}`);
+    const finnhubRes = await fetch(`https://finnhub.io/api/v1/news?category=${newsCategory}&token=${FINNHUB_KEY}`);
     const newsData = await finnhubRes.json();
     
     let filteredNews = "";
@@ -137,18 +137,18 @@ export const handler = async (event: any) => {
     const prompt = `
 You are an elite quantitative analyst. Analyze the Twelve Data technicals and Finnhub news. Your goal is extreme accuracy (90%+). Only output a BUY or SELL signal if both technicals and news align perfectly with a confidence score of 80% or higher. If the market is choppy, data is conflicting, or confidence is below 80%, you MUST return a signal of "NEUTRAL". Do not guess.
 
-TECHNICAL INDICATORS (\${interval} timeframe):
-- Current Price: \${indicators.currentPrice}
-- EMA 9: \${indicators.ema9}
-- EMA 21: \${indicators.ema21}
-- RSI 14: \${indicators.rsi}
-- MACD: \${indicators.macd}
-- ATR 14: \${indicators.atr}
-- Local Support: \${indicators.support}
-- Local Resistance: \${indicators.resistance}
+TECHNICAL INDICATORS (${interval} timeframe):
+- Current Price: ${indicators.currentPrice}
+- EMA 9: ${indicators.ema9}
+- EMA 21: ${indicators.ema21}
+- RSI 14: ${indicators.rsi}
+- MACD: ${indicators.macd}
+- ATR 14: ${indicators.atr}
+- Local Support: ${indicators.support}
+- Local Resistance: ${indicators.resistance}
 
 FUNDAMENTAL NEWS & SENTIMENT:
-\${filteredNews}
+${filteredNews}
 
 Do not write any markdown outside the JSON. The JSON must exactly match this schema:
 {
@@ -189,11 +189,11 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
       created_at: new Date().toISOString()
     };
 
-    const supabaseRes = await fetch(`\${SUPABASE_URL}/rest/v1/signals`, {
+    const supabaseRes = await fetch(`${SUPABASE_URL}/rest/v1/signals`, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_SERVICE_KEY,
-        'Authorization': `Bearer \${SUPABASE_SERVICE_KEY}`,
+        'Authorization': `Bearer ${SUPABASE_SERVICE_KEY}`,
         'Content-Type': 'application/json',
         'Prefer': 'return=representation'
       },
