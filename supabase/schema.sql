@@ -6,6 +6,7 @@ CREATE TABLE licenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     license_key TEXT UNIQUE NOT NULL,
     active BOOLEAN DEFAULT true,
+    used BOOLEAN DEFAULT false,
     user_email TEXT,
     device_id TEXT, -- Used to link a license to a specific device
     activated_at TIMESTAMP WITH TIME ZONE,
