@@ -165,7 +165,7 @@ Apply concepts from "Technical Analysis of the Financial Markets" (John Murphy) 
    - News Impact = 15%
    - Intermarket Analysis = 5%
 
-If confidence is below 70%, output NO TRADE. Never force a signal.
+If confidence is below 35%, output NO TRADE. Never force a signal.
 
 TECHNICAL INDICATORS & CANDLES (${interval} timeframe):
 - Current Price: ${indicators.currentPrice}
