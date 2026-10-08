@@ -16,7 +16,8 @@ const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 export const generateSignal = async (
   licenseKey: string,
   duration: number,
-  currentPrice: number
+  currentPrice: number,
+  candleData: any[] = []
 ): Promise<AIAnalysisResult> => {
   if (!licenseKey) {
     throw new Error("License key is required. Please activate in Settings.");
@@ -33,7 +34,7 @@ export const generateSignal = async (
       const response = await fetch('/.netlify/functions/generate-signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ licenseKey, duration, currentPrice }),
+        body: JSON.stringify({ licenseKey, duration, currentPrice, candleData }),
         signal: controller.signal
       });
       

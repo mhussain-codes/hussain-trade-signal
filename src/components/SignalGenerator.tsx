@@ -27,7 +27,9 @@ export const SignalGenerator = () => {
     setActiveSignal(null);
     
     try {
-      const result = await generateSignal(licenseKey, duration, currentPrice);
+      // Get the last 20 candles for deep analysis
+      const recentCandles = useMarketStore.getState().priceHistory.slice(-20);
+      const result = await generateSignal(licenseKey, duration, currentPrice, recentCandles);
       
       const newSignal = {
         id: Date.now().toString(),
