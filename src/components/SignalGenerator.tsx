@@ -3,13 +3,12 @@ import { useAppStore } from '../store/useAppStore';
 import { useMarketStore } from '../store/useMarketStore';
 import { generateSignal } from '../services/aiService';
 import { ArrowUpCircle, ArrowDownCircle, MinusCircle, AlertCircle, Loader2 } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid'; // need to install uuid or just use Date.now().toString()
 
 export const SignalGenerator = () => {
-  const { licenseKey, defaultDuration, addSignal, updateSignal } = useAppStore();
+  const { licenseKey, addSignal, updateSignal } = useAppStore();
   const { currentPrice } = useMarketStore();
   
-  const [duration, setDuration] = useState(defaultDuration);
+  const [duration, setDuration] = useState(60); // Default to 60s
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -27,30 +26,35 @@ export const SignalGenerator = () => {
     setActiveSignal(null);
     
     try {
-      // Get the last 20 candles for deep analysis
       const recentCandles = useMarketStore.getState().priceHistory.slice(-20);
-      const result = await generateSignal(licenseKey, duration, currentPrice, recentCandles);
+      const res = await generateSignal(licenseKey, duration, currentPrice, recentCandles);
+      
+      const resultData = res.data;
+      if (!resultData) throw new Error("Data unavailable");
+
+      const direction = resultData.signal === 'BUY' ? 'UP' : resultData.signal === 'SELL' ? 'DOWN' : 'NEUTRAL';
       
       const newSignal = {
-        id: Date.now().toString(),
+        id: resultData.id || Date.now().toString(),
         time: Date.now(),
         price: currentPrice,
-        entryPrice: currentPrice,
-        direction: result.direction,
-        confidence: result.confidence,
-        duration: result.duration,
-        strength: result.strength,
-        sentiment: result.sentiment,
+        entryPrice: resultData.entry_price || currentPrice,
+        direction: direction,
+        confidence: resultData.confidence,
+        duration: resultData.duration_seconds,
+        strength: resultData.risk || 'Medium',
+        reason: resultData.reasoning,
         status: 'Pending' as const
       };
       
       addSignal(newSignal);
-      setActiveSignal({...result, entryPrice: currentPrice, id: newSignal.id});
-      setCountdown(duration);
+      setActiveSignal(newSignal);
+      setCountdown(resultData.duration_seconds);
       
     } catch (err: any) {
       console.error("Backend Error:", err);
-      setError(err.message || "Failed to generate signal");
+      // Strictly show "Data unavailable" on error
+      setError("Data unavailable");
     } finally {
       setLoading(false);
     }
@@ -62,30 +66,13 @@ export const SignalGenerator = () => {
       timer = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
-            // Signal completed
             clearInterval(timer);
-            // Check result
-            const exitPrice = useMarketStore.getState().currentPrice;
-            const entry = activeSignal.entryPrice;
-            let res: any = 'Unable to verify';
-            
-            if (activeSignal.direction === 'UP') {
-              res = exitPrice > entry ? 'Direction moved UP' : 'Direction moved DOWN';
-            } else {
-              res = exitPrice < entry ? 'Direction moved DOWN' : 'Direction moved UP';
-            }
-            
+            // Let the scheduled function evaluate the real result
             updateSignal(activeSignal.id, { 
               status: 'Completed', 
-              exitPrice,
-              result: res 
+              result: 'Evaluating...' 
             });
-            
-            // clear active after a short delay
-            setTimeout(() => {
-                setActiveSignal(null);
-            }, 5000);
-            
+            setTimeout(() => { setActiveSignal(null); }, 5000);
             return 0;
           }
           return prev - 1;
@@ -97,7 +84,7 @@ export const SignalGenerator = () => {
 
   const getConfidenceColor = (conf: number) => {
     if (conf >= 80) return 'text-success';
-    if (conf >= 60) return 'text-primary';
+    if (conf >= 65) return 'text-primary';
     return 'text-danger';
   };
 
@@ -113,7 +100,7 @@ export const SignalGenerator = () => {
           <div className="flex flex-col gap-3">
             <label className="text-sm font-medium text-text-muted">Select Duration:</label>
             <div className="grid grid-cols-3 gap-2">
-              {[10, 15, 30].map(d => (
+              {[60, 120, 300].map(d => (
                 <button
                   key={d}
                   onClick={() => setDuration(d)}
@@ -123,7 +110,7 @@ export const SignalGenerator = () => {
                       : 'border-white/10 hover:border-white/20 text-text-muted'
                   }`}
                 >
-                  {d} Seconds
+                  {d / 60} Min
                 </button>
               ))}
             </div>
@@ -180,7 +167,7 @@ export const SignalGenerator = () => {
                 <div className="text-xl font-bold">{activeSignal.duration}s</div>
               </div>
               <div className="bg-background/50 p-3 rounded-lg border border-white/5">
-                <div className="text-xs text-text-muted mb-1">Signal Strength</div>
+                <div className="text-xs text-text-muted mb-1">Risk Level</div>
                 <div className="text-xl font-bold">{activeSignal.strength}</div>
               </div>
               <div className="bg-background/50 p-3 rounded-lg border border-white/5">
@@ -204,37 +191,6 @@ export const SignalGenerator = () => {
             <div className="mt-6 bg-background/30 rounded-xl border border-white/10 p-4 text-left">
               <h3 className="text-sm font-bold text-primary mb-3">AI Reasoning Panel</h3>
               <p className="text-sm text-text-muted mb-4">{activeSignal.reason}</p>
-              
-              <div className="space-y-3">
-                {activeSignal.bullishFactors && activeSignal.bullishFactors.length > 0 && (
-                  <div>
-                    <span className="text-xs font-bold text-success uppercase">Bullish Factors:</span>
-                    <ul className="list-disc list-inside text-xs text-text-muted mt-1">
-                      {activeSignal.bullishFactors.map((f: string, i: number) => <li key={i}>{f}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {activeSignal.bearishFactors && activeSignal.bearishFactors.length > 0 && (
-                  <div>
-                    <span className="text-xs font-bold text-danger uppercase">Bearish Factors:</span>
-                    <ul className="list-disc list-inside text-xs text-text-muted mt-1">
-                      {activeSignal.bearishFactors.map((f: string, i: number) => <li key={i}>{f}</li>)}
-                    </ul>
-                  </div>
-                )}
-                {activeSignal.technicalImpact && (
-                  <div>
-                    <span className="text-xs font-bold text-primary uppercase">Technical Impact:</span>
-                    <p className="text-xs text-text-muted mt-1">{activeSignal.technicalImpact}</p>
-                  </div>
-                )}
-                {activeSignal.newsImpact && (
-                  <div>
-                    <span className="text-xs font-bold text-primary uppercase">News Impact:</span>
-                    <p className="text-xs text-text-muted mt-1">{activeSignal.newsImpact}</p>
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </div>

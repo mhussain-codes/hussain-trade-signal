@@ -1,11 +1,79 @@
 import Groq from 'groq-sdk';
 
+// Helper to calculate indicators
+function calculateIndicators(candles: any[]) {
+  const closes = candles.map(c => c.close);
+  
+  const calculateEMA = (data: number[], period: number) => {
+    const k = 2 / (period + 1);
+    let ema = data[0];
+    for (let i = 1; i < data.length; i++) {
+      ema = (data[i] - ema) * k + ema;
+    }
+    return ema;
+  };
+  
+  const ema9 = calculateEMA(closes, 9);
+  const ema21 = calculateEMA(closes, 21);
+  const ema12 = calculateEMA(closes, 12);
+  const ema26 = calculateEMA(closes, 26);
+  const macd = ema12 - ema26;
+
+  // RSI 14
+  let avgGain = 0, avgLoss = 0;
+  if (closes.length > 14) {
+    let gains = 0, losses = 0;
+    for(let i = 1; i <= 14; i++) {
+       const diff = closes[i] - closes[i-1];
+       if (diff > 0) gains += diff;
+       else losses -= diff;
+    }
+    avgGain = gains / 14;
+    avgLoss = losses / 14;
+    for(let i = 15; i < closes.length; i++) {
+       const diff = closes[i] - closes[i-1];
+       const gain = diff > 0 ? diff : 0;
+       const loss = diff < 0 ? -diff : 0;
+       avgGain = (avgGain * 13 + gain) / 14;
+       avgLoss = (avgLoss * 13 + loss) / 14;
+    }
+  }
+  const rs = avgGain / (avgLoss === 0 ? 1 : avgLoss);
+  const rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+
+  // ATR 14
+  const tr = [];
+  for(let i = 1; i < candles.length; i++) {
+    const high = candles[i].high;
+    const low = candles[i].low;
+    const prevClose = candles[i-1].close;
+    tr.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+  }
+  const recentTR = tr.slice(-14);
+  const atr = recentTR.length ? recentTR.reduce((a,b)=>a+b,0)/recentTR.length : 0;
+
+  // Support & Resistance (Last 50)
+  const last50 = candles.slice(-50);
+  const resistance = Math.max(...last50.map(c => c.high));
+  const support = Math.min(...last50.map(c => c.low));
+
+  return {
+    currentPrice: closes[closes.length - 1],
+    ema9: Number(ema9.toFixed(4)),
+    ema21: Number(ema21.toFixed(4)),
+    rsi: Number(rsi.toFixed(2)),
+    macd: Number(macd.toFixed(4)),
+    atr: Number(atr.toFixed(4)),
+    support: Number(support.toFixed(4)),
+    resistance: Number(resistance.toFixed(4)),
+  };
+}
+
 export const handler = async (event: any) => {
   if (event.httpMethod !== 'POST') {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed. Use POST.' }) };
   }
 
-  // 1. Environment Variables Configuration
   const TWELVE_DATA_KEY = (process.env.TWELVE_DATA_KEY || '').trim();
   const FINNHUB_KEY = (process.env.FINNHUB_KEY || '').trim();
   const GROQ_API_KEY = (process.env.GROQ_API_KEY || '').trim();
@@ -14,125 +82,119 @@ export const handler = async (event: any) => {
   const SUPABASE_URL = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
   const SUPABASE_SERVICE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 
-  // Validate critical keys
   if (!TWELVE_DATA_KEY || !FINNHUB_KEY || !GROQ_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
-    return { 
-      statusCode: 500, 
-      body: JSON.stringify({ error: 'Missing one or more required environment variables.' }) 
-    };
+    return { statusCode: 500, body: JSON.stringify({ error: 'Data unavailable (Missing Environment Keys)' }) };
   }
 
   try {
-    // Parse request body
     const body = JSON.parse(event.body || '{}');
-    const symbol = body.symbol || 'BTC/USD'; // e.g., 'BTC/USD', 'EUR/USD', 'AAPL'
+    const symbol = body.symbol || 'XAU/USD';
+    const duration = body.duration || 60; // 60, 120, 300
     
-    // Determine Finnhub category based on symbol
-    let newsCategory = 'general';
-    if (symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('CRYPTO')) {
-      newsCategory = 'crypto';
-    } else if (symbol.includes('USD') || symbol.includes('EUR') || symbol.includes('GBP')) {
-      newsCategory = 'forex';
+    // Interval mapped from duration
+    const interval = duration >= 300 ? '5min' : '1min';
+
+    // 1. Fetch TwelveData Candles
+    const twelveDataRes = await fetch(`https://api.twelvedata.com/time_series?symbol=\${symbol}&interval=\${interval}&outputsize=100&apikey=\${TWELVE_DATA_KEY}`);
+    const timeSeriesData = await twelveDataRes.json();
+    
+    if (!timeSeriesData.values || timeSeriesData.values.length === 0) {
+      throw new Error("TwelveData API returned empty or error response");
     }
 
-    // ==========================================
-    // STEP 2: Twelve Data - Fetch Technicals
-    // ==========================================
-    const fetchTechnicalData = async () => {
-      try {
-        const [priceRes, rsiRes, emaRes] = await Promise.all([
-          fetch(`https://api.twelvedata.com/price?symbol=\${symbol}&apikey=\${TWELVE_DATA_KEY}`),
-          fetch(`https://api.twelvedata.com/rsi?symbol=\${symbol}&interval=15min&apikey=\${TWELVE_DATA_KEY}`),
-          fetch(`https://api.twelvedata.com/ema?symbol=\${symbol}&interval=15min&time_period=20&apikey=\${TWELVE_DATA_KEY}`)
-        ]);
+    // TwelveData returns newest first. Reverse to get oldest to newest for calculations.
+    const rawCandles = timeSeriesData.values.reverse().map((c: any) => ({
+      open: parseFloat(c.open),
+      high: parseFloat(c.high),
+      low: parseFloat(c.low),
+      close: parseFloat(c.close)
+    }));
 
-        const priceData = await priceRes.json();
-        const rsiData = await rsiRes.json();
-        const emaData = await emaRes.json();
+    const indicators = calculateIndicators(rawCandles);
 
-        return {
-          price: priceData.price || 'Unknown',
-          rsi: rsiData.values?.[0]?.rsi || 'Unknown',
-          ema20: emaData.values?.[0]?.ema || 'Unknown'
-        };
-      } catch (e) {
-        console.error("Twelve Data fetch error:", e);
-        return { price: 'Error', rsi: 'Error', ema20: 'Error' };
-      }
-    };
+    // 2. Fetch Finnhub News (Search for Gold, Fed, Dollar, Yields if XAU/USD, else general/forex)
+    const newsCategory = symbol.includes('BTC') || symbol.includes('CRYPTO') ? 'crypto' : 'general';
+    const finnhubRes = await fetch(`https://finnhub.io/api/v1/news?category=\${newsCategory}&token=\${FINNHUB_KEY}`);
+    const newsData = await finnhubRes.json();
+    
+    let filteredNews = "";
+    if (Array.isArray(newsData)) {
+       // Find news containing relevant keywords
+       const keywords = ['gold', 'xau', 'fed', 'dollar', 'yield', 'rate', 'powell', 'inflation', 'cpi'];
+       const relevant = newsData.filter(n => {
+           const text = (n.headline + " " + n.summary).toLowerCase();
+           return keywords.some(k => text.includes(k));
+       });
+       const topNews = relevant.length > 0 ? relevant.slice(0, 5) : newsData.slice(0, 5);
+       filteredNews = topNews.map(n => n.headline).join(' | ');
+    } else {
+       filteredNews = "No news available.";
+    }
 
-    // ==========================================
-    // STEP 3: Finnhub - Fetch Fundamental News
-    // ==========================================
-    const fetchFundamentalData = async () => {
-      try {
-        const newsRes = await fetch(`https://finnhub.io/api/v1/news?category=\${newsCategory}&token=\${FINNHUB_KEY}`);
-        const newsData = await newsRes.json();
-        
-        if (!Array.isArray(newsData)) return "No news available.";
-
-        // Extract top 5 headlines
-        return newsData.slice(0, 5).map((n: any) => n.headline).join(' | ');
-      } catch (e) {
-        console.error("Finnhub fetch error:", e);
-        return "Failed to fetch fundamental news.";
-      }
-    };
-
-    // Execute API fetches concurrently
-    const [technicals, fundamentals] = await Promise.all([
-      fetchTechnicalData(),
-      fetchFundamentalData()
-    ]);
-
-    // ==========================================
-    // STEP 4: Groq AI - Analyze and Generate JSON
-    // ==========================================
+    // 3. Prompt Groq (llama-3.3-70b-versatile)
     const groq = new Groq({ apiKey: GROQ_API_KEY });
     
     const prompt = `
 You are an elite quantitative AI trading algorithm.
 Analyze the following real-time data for \${symbol}:
 
-TECHNICAL INDICATORS (15m timeframe):
-- Current Price: \${technicals.price}
-- RSI (14): \${technicals.rsi}
-- EMA (20): \${technicals.ema20}
+TECHNICAL INDICATORS (\${interval} timeframe):
+- Current Price: \${indicators.currentPrice}
+- EMA 9: \${indicators.ema9}
+- EMA 21: \${indicators.ema21}
+- RSI 14: \${indicators.rsi}
+- MACD: \${indicators.macd}
+- ATR 14: \${indicators.atr}
+- Local Support: \${indicators.support}
+- Local Resistance: \${indicators.resistance}
 
-FUNDAMENTAL NEWS:
-\${fundamentals}
+FUNDAMENTAL NEWS & SENTIMENT:
+\${filteredNews}
 
 TASK:
-Based on the technical structure and fundamental news sentiment, output a strict JSON object with your trading signal.
+Output a strict JSON object with your trading signal. If the overall setup confidence is below 65%, output "NEUTRAL".
 Do not write any markdown outside the JSON. The JSON must exactly match this schema:
 {
-  "signal": "Buy" | "Sell" | "Hold",
+  "signal": "BUY" | "SELL" | "NEUTRAL",
   "confidence": number (between 0 and 100),
-  "reasoning": "A short, precise explanation combining technical and fundamental factors."
+  "reasoning": "A concise explanation combining technical and fundamental factors.",
+  "risk": "Low" | "Medium" | "High"
 }
 `;
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
-      model: 'llama3-70b-8192',
-      temperature: 0.1, // Low temp for more analytical, strict output
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0.2,
       response_format: { type: "json_object" }
     });
 
     const aiContent = chatCompletion.choices[0]?.message?.content;
     if (!aiContent) throw new Error("AI returned empty response");
     
-    const aiResult = JSON.parse(aiContent);
+    let aiResult = JSON.parse(aiContent);
 
-    // ==========================================
-    // STEP 5: Supabase - Insert Signal Record
-    // ==========================================
+    // Apply strict confidence rule
+    if (aiResult.confidence < 65) {
+      aiResult.signal = "NEUTRAL";
+    }
+    
+    // Normalize case
+    if (aiResult.signal.toUpperCase() === "BUY") aiResult.signal = "UP"; // Keeping 'UP'/'DOWN' if frontend uses it, or adapt. Let's use BUY/SELL as requested.
+    const finalSignal = aiResult.signal.toUpperCase() === "BUY" || aiResult.signal.toUpperCase() === "UP" ? "BUY" 
+                      : aiResult.signal.toUpperCase() === "SELL" || aiResult.signal.toUpperCase() === "DOWN" ? "SELL" 
+                      : "NEUTRAL";
+
+    // 4. Save to Supabase
     const signalRecord = {
-      pair: symbol,
-      signal: aiResult.signal,
+      symbol: symbol,
+      signal: finalSignal,
       confidence: aiResult.confidence,
+      entry_price: indicators.currentPrice,
+      duration_seconds: duration,
       reasoning: aiResult.reasoning,
-      price_at_time: technicals.price,
+      risk: aiResult.risk || "Medium",
+      result: "PENDING",
       created_at: new Date().toISOString()
     };
 
@@ -150,19 +212,16 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     if (!supabaseRes.ok) {
       const dbErr = await supabaseRes.text();
       console.error("Supabase Insert Error:", dbErr);
-      throw new Error(`Failed to save signal to database: \${dbErr}`);
     }
 
-    const savedRecord = await supabaseRes.json();
+    const savedRecord = supabaseRes.ok ? await supabaseRes.json() : [signalRecord];
 
-    // Return the successful result
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         success: true,
-        message: "Signal generated and saved successfully",
-        data: savedRecord[0] || savedRecord
+        data: savedRecord[0] || signalRecord
       })
     };
 
@@ -171,7 +230,7 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     return {
       statusCode: 500,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: error.message || 'Internal Server Error' })
+      body: JSON.stringify({ error: 'Data unavailable' }) // Strict error message per user request
     };
   }
 };

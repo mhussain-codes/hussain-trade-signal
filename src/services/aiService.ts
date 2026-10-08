@@ -1,14 +1,17 @@
 export interface AIAnalysisResult {
-  direction: 'UP' | 'DOWN' | 'NEUTRAL';
-  confidence: number;
-  duration: number;
-  strength: 'Weak' | 'Medium' | 'Strong' | 'None';
-  sentiment: 'Bullish' | 'Bearish' | 'Neutral';
-  reason: string;
-  bullishFactors?: string[];
-  bearishFactors?: string[];
-  technicalImpact?: string;
-  newsImpact?: string;
+  success?: boolean;
+  data?: {
+    symbol: string;
+    signal: 'BUY' | 'SELL' | 'NEUTRAL';
+    confidence: number;
+    duration_seconds: number;
+    reasoning: string;
+    risk: 'Low' | 'Medium' | 'High';
+    entry_price: number;
+    id?: string;
+  };
+  // Fallback for UI compatibility if needed
+  direction?: 'UP' | 'DOWN' | 'NEUTRAL';
 }
 
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -31,7 +34,7 @@ export const generateSignal = async (
     const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout per request
 
     try {
-      const response = await fetch('/.netlify/functions/generate-signal', {
+      const response = await fetch('/.netlify/functions/advanced-generate-signal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ licenseKey, duration, currentPrice, candleData }),
