@@ -1,2 +1,2 @@
-﻿export const GROQ_MODEL = 'openai/gpt-oss-120b';
+export const GROQ_MODEL = 'llama-3.1-8b-instant';
 export const GROQ_TEMPERATURE = 0.2;
