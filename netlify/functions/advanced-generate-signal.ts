@@ -152,7 +152,9 @@ FUNDAMENTAL NEWS & SENTIMENT:
 \${filteredNews}
 
 TASK:
-Output a strict JSON object with your trading signal. If the overall setup confidence is below 65%, output "NEUTRAL".
+You are a decisive scalper. Output a strict JSON object with your trading signal. Find the most probable direction (BUY or SELL) based on the data.
+Only output "NEUTRAL" if the setup is completely random and you have absolutely no directional bias. 
+Scale your confidence (0-100) for a short-term trade. A standard setup should have a confidence of 70-95.
 Do not write any markdown outside the JSON. The JSON must exactly match this schema:
 {
   "signal": "BUY" | "SELL" | "NEUTRAL",
@@ -165,7 +167,7 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     const chatCompletion = await groq.chat.completions.create({
       messages: [{ role: "user", content: prompt }],
       model: 'llama-3.3-70b-versatile',
-      temperature: 0.2,
+      temperature: 0.5,
       response_format: { type: "json_object" }
     });
 
@@ -174,8 +176,8 @@ Do not write any markdown outside the JSON. The JSON must exactly match this sch
     
     let aiResult = JSON.parse(aiContent);
 
-    // Apply strict confidence rule
-    if (aiResult.confidence < 65) {
+    // Apply relaxed confidence rule to avoid spamming NEUTRAL
+    if (aiResult.confidence < 45) {
       aiResult.signal = "NEUTRAL";
     }
     
