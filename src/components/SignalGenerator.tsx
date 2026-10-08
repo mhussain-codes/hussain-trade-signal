@@ -7,8 +7,8 @@ import { ArrowUpCircle, ArrowDownCircle, MinusCircle, AlertCircle, Loader2 } fro
 export const SignalGenerator = () => {
   const { licenseKey, addSignal, updateSignal } = useAppStore();
   const { currentPrice } = useMarketStore();
+  const { defaultDuration } = useAppStore();
   
-  const [duration, setDuration] = useState(60); // Default to 60s
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -27,7 +27,7 @@ export const SignalGenerator = () => {
     
     try {
       const recentCandles = useMarketStore.getState().priceHistory.slice(-20);
-      const res = await generateSignal(licenseKey, duration, currentPrice, recentCandles);
+      const res = await generateSignal(licenseKey, defaultDuration, currentPrice, recentCandles);
       
       const resultData = res.data;
       if (!resultData) throw new Error("Data unavailable");
@@ -98,25 +98,6 @@ export const SignalGenerator = () => {
 
       {!activeSignal ? (
         <>
-          <div className="flex flex-col gap-3">
-            <label className="text-sm font-medium text-text-muted">Select Duration:</label>
-            <div className="grid grid-cols-3 gap-2">
-              {[60, 120, 300].map(d => (
-                <button
-                  key={d}
-                  onClick={() => setDuration(d)}
-                  className={`py-2 rounded-lg border transition-all \${
-                    duration === d 
-                      ? 'border-primary bg-primary/10 text-primary font-bold' 
-                      : 'border-white/10 hover:border-white/20 text-text-muted'
-                  }`}
-                >
-                  {d / 60} Min
-                </button>
-              ))}
-            </div>
-          </div>
-
           <button
             onClick={handleGenerate}
             disabled={loading}
@@ -125,7 +106,7 @@ export const SignalGenerator = () => {
             {loading ? (
               <><Loader2 className="w-6 h-6 animate-spin" /> Analyzing market conditions...</>
             ) : (
-              'GENERATE SIGNAL'
+              `GENERATE \${defaultDuration / 60} MIN SIGNAL`
             )}
           </button>
           
@@ -188,11 +169,20 @@ export const SignalGenerator = () => {
               </div>
             </div>
 
-            {/* AI REASONING PANEL */}
             <div className="mt-6 bg-background/30 rounded-xl border border-white/10 p-4 text-left">
               <h3 className="text-sm font-bold text-primary mb-3">AI Reasoning Panel</h3>
               <p className="text-sm text-text-muted mb-4">{activeSignal.reason}</p>
             </div>
+            
+            <button 
+              onClick={() => {
+                setActiveSignal(null);
+                setCountdown(0);
+              }}
+              className="mt-2 w-full py-3 rounded-lg font-bold text-sm bg-white/5 hover:bg-white/10 transition-colors border border-white/10 text-text-muted hover:text-text"
+            >
+              SKIP / NEW SIGNAL
+            </button>
           </div>
         </div>
       )}

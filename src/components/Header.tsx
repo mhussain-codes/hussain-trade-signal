@@ -1,10 +1,12 @@
 import { useMarketStore } from '../store/useMarketStore';
+import { useAppStore } from '../store/useAppStore';
 import { format } from 'date-fns';
 import { useEffect, useState } from 'react';
-import { CircleUser } from 'lucide-react';
+import { CircleUser, Clock } from 'lucide-react';
 
 export const Header = ({ title }: { title: string }) => {
   const { currentPrice, dailyChange, dailyChangePercent } = useMarketStore();
+  const { defaultDuration, setDefaultDuration } = useAppStore();
   const [time, setTime] = useState(new Date());
 
   useEffect(() => {
@@ -28,8 +30,20 @@ export const Header = ({ title }: { title: string }) => {
         </div>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="text-sm text-text-muted hidden md:block">
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 bg-card border border-white/5 px-2 md:px-3 py-1.5 rounded-lg">
+          <Clock className="w-4 h-4 text-primary hidden md:block" />
+          <select 
+            value={defaultDuration}
+            onChange={(e) => setDefaultDuration(Number(e.target.value))}
+            className="bg-transparent text-xs md:text-sm font-medium focus:outline-none cursor-pointer"
+          >
+            <option value={60} className="bg-background">1 Min Trade</option>
+            <option value={120} className="bg-background">2 Min Trade</option>
+            <option value={300} className="bg-background">5 Min Trade</option>
+          </select>
+        </div>
+        <div className="text-sm text-text-muted hidden lg:block">
           {format(time, 'MMM d, yyyy HH:mm:ss')}
         </div>
         <button className="w-8 h-8 rounded-full bg-card border border-white/10 flex items-center justify-center hover:bg-white/5 transition-colors">
