@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useAppStore } from '../store/useAppStore';
 import { ArrowUpCircle, ArrowDownCircle, Activity, Clock, Server, Lock, Fingerprint, Zap, Crosshair, SkipForward, History, ShieldAlert } from 'lucide-react';
 
 const calculateRSI = (closes: number[], period = 14) => {
@@ -45,6 +46,7 @@ interface TradeHistory {
 }
 
 export default function BinaryBot() {
+  const { isLicenseActive } = useAppStore();
   const [asset, setAsset] = useState('XAU/USD');
   const [timing, setTiming] = useState('1 MIN');
   const [status, setStatus] = useState<'IDLE' | 'ANALYZING' | 'RESULT'>('IDLE');
@@ -68,6 +70,10 @@ export default function BinaryBot() {
   }, []);
 
   const analyzeMarket = async () => {
+    if (!isLicenseActive) {
+      alert('License Key Missing or Invalid! Please activate your license to generate signals.');
+      return;
+    }
     setStatus('ANALYZING');
     setAiData(null);
     setShowHistory(false);
@@ -305,8 +311,10 @@ Reply ONLY with JSON: {"signal": "BUY" or "SELL" or "WAIT", "confidence": <numbe
               <div className="flex flex-col items-center justify-center w-full animate-in fade-in duration-500">
                 <div className="relative w-40 h-40 rounded-full border border-yellow-500/20 bg-black/50 shadow-[inset_0_0_20px_rgba(234,179,8,0.1)] flex items-center justify-center mb-8">
                    <div className="absolute inset-0 rounded-full border border-white/5 scale-110"></div>
-                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/20 to-transparent w-full h-full animate-[spin_3s_linear_infinite]" style={{ transformOrigin: 'center' }}>
-                      <div className="w-1/2 h-full border-r-2 border-yellow-500/40"></div>
+                   <div className="absolute inset-0 rounded-full overflow-hidden">
+                     <div className="absolute inset-0 bg-gradient-to-r from-transparent via-yellow-500/20 to-transparent w-full h-full animate-[spin_3s_linear_infinite]" style={{ transformOrigin: 'center' }}>
+                        <div className="w-1/2 h-full border-r-2 border-yellow-500/40"></div>
+                     </div>
                    </div>
                    <img src="/logo.jpg" alt="Logo" className="w-20 h-20 rounded-full object-cover shadow-[0_0_30px_rgba(234,179,8,0.3)] z-10 opacity-90" />
                 </div>
