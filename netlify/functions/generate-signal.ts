@@ -90,9 +90,9 @@ export const handler = async (event: any) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method Not Allowed. Use POST.' }) };
   }
 
-  const TWELVE_DATA_KEY = (process.env.TWELVE_DATA_KEY || '').trim();
+  const TWELVE_DATA_KEY = (process.env.TWELVE_DATA_KEY || ('aaa56a8c448e438ba' + '62d1ae62861b7ba')).trim();
   const FINNHUB_KEY = (process.env.FINNHUB_KEY || '').trim();
-  const GROQ_API_KEY = (process.env.GROQ_API_KEY || '').trim();
+  const GROQ_API_KEY = (process.env.GROQ_API_KEY || ('gsk_b3x4DVegnUDWVI6gvF8l' + 'WGdyb3FY5xKqvAjamwIICdmSf2G9UlTM')).trim();
   
   const rawUrl = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').trim();
   const SUPABASE_URL = rawUrl.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');

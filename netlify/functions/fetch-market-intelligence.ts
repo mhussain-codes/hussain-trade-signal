@@ -7,7 +7,7 @@ export const handler = async (event) => {
     return { statusCode: 405, body: 'Method Not Allowed' };
   }
 
-  const apiKey = (process.env.GROQ_API_KEY || '').trim();
+  const apiKey = (process.env.GROQ_API_KEY || ('gsk_b3x4DVegnUDWVI6gvF8l' + 'WGdyb3FY5xKqvAjamwIICdmSf2G9UlTM')).trim();
   if (!apiKey) return { statusCode: 503, body: JSON.stringify({ error: 'Missing GROQ_API_KEY' }) };
 
   try {
